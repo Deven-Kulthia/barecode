@@ -34,7 +34,7 @@ $(PYZ): $(PYSRC)
 	  "$(PYZ)" "$$(wc -c < $(PYZ) | tr -d ' ')" "$(PYZ)"
 
 run: build
-	@./$(PYZ) audit .
+	@./$(PYZ) audit
 
 # ── verification ─────────────────────────────────────────────────────────────
 test:

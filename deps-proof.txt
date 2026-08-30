@@ -1,0 +1,18 @@
+BareCode — zero-dependency proof
+================================================================
+python              : 3.14.4  (297 stdlib modules known)
+files scanned       : 11
+ast nodes walked    : 11,354
+distinct imports    : 24
+
+stdlib imports      : 23 / 24
+  __future__, argparse, ast, base64, collections, concurrent, contextlib, csv, dataclasses, email, enum, hashlib, io, json, os, pathlib, re, sys, sysconfig, tempfile, tomllib, typing, unittest
+first-party imports : 1
+  barecode
+third-party imports : 0
+  (none)
+
+manifest            : empty
+
+================================================================
+RESULT: ZERO THIRD-PARTY DEPENDENCIES — manifest empty, every import is stdlib

@@ -19,7 +19,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, env as envmod, integrity
+from . import __version__, advisor, env as envmod, graph as graphmod, integrity
 from .ansi import Style
 
 EXIT_OK = 0
@@ -47,11 +47,17 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--version", action="version", version=f"barecode {__version__}")
 
     common = argparse.ArgumentParser(add_help=False)
+    # Deliberately a flag, not a positional. A positional here would be added to
+    # every subparser *before* that subparser's own positionals, so
+    # `barecode why requests /path` would bind "requests" to the path. A flag has
+    # no ordering ambiguity and reads the same on every command.
     common.add_argument(
-        "path",
-        nargs="?",
+        "-p",
+        "--path",
         default=".",
-        help="project dir, virtualenv, or site-packages to inspect (default: the current interpreter's)",
+        metavar="PATH",
+        help="project dir, virtualenv, or site-packages to inspect "
+        "(default: the current directory, falling back to this interpreter)",
     )
     common.add_argument("--json", action="store_true", help="emit machine-readable JSON instead of a report")
     common.add_argument("--no-color", action="store_true", help="never emit ANSI colour (also honours NO_COLOR)")
@@ -81,6 +87,26 @@ def build_parser() -> argparse.ArgumentParser:
         "the installer recorded. There is no `pip verify`; this is that command.",
     )
     v.add_argument("--only", metavar="PKG", help="verify a single package instead of the whole environment")
+
+    w = subs.add_parser(
+        "why",
+        parents=[common],
+        help="explain every reason a package is installed",
+        description="Show the dependency paths that pull a package into the environment, "
+        "shortest first. A package with no path is one you asked for directly.",
+    )
+    w.add_argument("package", help="the package to explain")
+    w.add_argument("--limit", type=int, default=25, metavar="N", help="max paths to show (default: 25)")
+    w.add_argument("--blast", action="store_true", help="also show what breaks if this package is compromised")
+
+    subs.add_parser(
+        "killable",
+        parents=[common],
+        help="which installed packages the standard library could replace",
+        description="Cross-reference the environment against a curated package -> stdlib table. "
+        "Reports what is a drop-in replacement, what only covers the common path, and what "
+        "genuinely has no stdlib equivalent.",
+    )
 
     return ap
 
@@ -221,7 +247,106 @@ def cmd_verify(args, style: Style, note) -> int:
     return EXIT_FINDINGS if SEVERITY_ORDER.index(worst) >= SEVERITY_ORDER.index(args.fail_on) else EXIT_OK
 
 
-COMMANDS = {"audit": cmd_audit, "verify": cmd_verify}
+def cmd_why(args, style: Style, note) -> int:
+    env = resolve_environment(args.path, note)
+    target = envmod.normalise(args.package)
+    if target not in env.packages:
+        print(f"error: {args.package!r} is not installed in {env.site_packages}", file=sys.stderr)
+        return EXIT_ENV
+
+    g = graphmod.build(env)
+    paths = graphmod.why(g, target, limit=args.limit)
+    direct = [p for p in paths if len(p) == 1]
+    affected = sorted(graphmod.blast_radius(g, target)) if args.blast else []
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "package": target,
+                    "version": env.packages[target].version,
+                    "direct": bool(direct),
+                    "paths": paths,
+                    "required_by": g.reverse.get(target, []),
+                    "blast_radius": affected,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return EXIT_OK
+
+    pkg = env.packages[target]
+    print(f"{style.head(target)} {pkg.version}")
+    if pkg.summary:
+        print(f"  {style.faint(pkg.summary[:100])}")
+    print()
+    if direct:
+        print(style.ok("  installed directly — nothing else in this environment requires it"))
+    else:
+        print(f"  required by {len(g.reverse.get(target, []))} package(s), via {len(paths)} path(s):")
+        for path in paths:
+            print("    " + style.faint(" -> ").join(path))
+    if args.blast:
+        print()
+        print(f"  {style.warn('blast radius')}: {len(affected)} package(s) depend on this, directly or transitively")
+        for name in affected:
+            print(f"    {name}")
+    return EXIT_OK
+
+
+def cmd_killable(args, style: Style, note) -> int:
+    env = resolve_environment(args.path, note)
+    g = graphmod.build(env)
+    hits = advisor.killable(env, g.reverse)
+
+    if args.json:
+        print(
+            json.dumps(
+                [
+                    {
+                        "package": h.swap.package,
+                        "version": h.version,
+                        "stdlib": h.swap.stdlib,
+                        "confidence": str(h.swap.confidence),
+                        "direct": h.direct,
+                        "note": h.swap.note,
+                    }
+                    for h in hits
+                ],
+                indent=2,
+            )
+        )
+        return EXIT_OK
+
+    print(style.head("BareCode killable"))
+    print(f"  environment  : {env.site_packages}")
+    print(f"  {len(hits)} of {len(env.packages)} installed packages appear in the stdlib substitution table\n")
+    if not hits:
+        print(style.ok("  nothing in this environment has a known stdlib replacement"))
+        return EXIT_OK
+
+    groups = {c: [h for h in hits if h.swap.confidence == c] for c in advisor.Confidence}
+    labels = {
+        advisor.Confidence.DROP_IN: (style.ok, "drop-in — the stdlib does the whole job"),
+        advisor.Confidence.PARTIAL: (style.warn, "partial — covers the common path, gaps noted"),
+        advisor.Confidence.NONE: (style.bad, "no stdlib equivalent — keep these"),
+    }
+    for conf, items in groups.items():
+        if not items:
+            continue
+        colour, caption = labels[conf]
+        print(f"  {colour(caption)}")
+        for h in items:
+            tag = "" if h.direct else style.faint(" (transitive)")
+            print(f"    {h.swap.package:<22} {h.version:<12} -> {h.swap.stdlib}{tag}")
+            if h.swap.note:
+                print(f"      {style.faint(h.swap.note)}")
+        print()
+    return EXIT_OK
+
+
+COMMANDS = {"audit": cmd_audit, "verify": cmd_verify, "why": cmd_why, "killable": cmd_killable}
 
 
 def main(argv: list[str] | None = None) -> int:
