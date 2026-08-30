@@ -199,7 +199,7 @@ threads give a real speedup: 4,927 files across 190 packages in **3.4 s**.
 ### 12. `pytest` → `unittest`
 
 **Normally:** `pytest` plus plugins.
-**Instead:** `unittest` — 54 tests in `tests/test_barecode.py`, run by
+**Instead:** `unittest` — 79 tests in `tests/test_barecode.py`, run by
 `make test`.
 
 The hackathon permits a dev-only test dependency *for languages that ship no
