@@ -2,6 +2,8 @@
 
 **Offline supply-chain X-ray for Python environments. Zero dependencies.**
 
+[![zero-dependency proof](https://github.com/Deven-Kulthia/barecode/actions/workflows/ci.yml/badge.svg)](https://github.com/Deven-Kulthia/barecode/actions/workflows/ci.yml)
+
 > Track A — Developer Tools & CLI · [Zero Dependency Hackathon 2026](https://zerodepshack.com/) · Team *Import Error*
 
 ```console
@@ -219,10 +221,28 @@ the frozen set CPython builds at compile time. It exits non-zero if anything els
 ever appears, and it also asserts `pyproject.toml` declares no dependencies and
 has no `[build-system]` table. The proof script is itself subject to the proof.
 
-Pre-generated output is committed as [`deps-proof.txt`](deps-proof.txt).
+Pre-generated output is committed as [`deps-proof.txt`](deps-proof.txt), and the
+same two checks run on a clean GitHub runner on every push — see the badge above.
+That workflow contains **no `pip install` step at all**; its only setup is a
+Python interpreter, so it would go red the moment a third-party import appeared.
+
 See **[STDLIB.md](STDLIB.md)** for all 15 package→stdlib substitutions, and
 **[PACKAGE-KILLER.md](PACKAGE-KILLER.md)** for the feature comparison against
 the tools BareCode replaces.
+
+## Reproduce the tamper detection yourself
+
+```console
+$ ./scripts/demo.sh setup      # builds a throwaway venv with requests in it
+$ barecode verify -p /tmp/barecode-demo     # clean -> exit 0
+$ ./scripts/demo.sh poison     # changes ONE character, file size unchanged
+$ barecode verify -p /tmp/barecode-demo     # modified -> exit 1
+$ ./scripts/demo.sh restore
+```
+
+The poison step edits a single byte in `requests/sessions.py` while preserving
+the file's length, so size and mtime both still look plausible. Only re-hashing
+finds it.
 
 ## Architecture
 
