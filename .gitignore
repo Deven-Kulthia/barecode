@@ -1,0 +1,20 @@
+# Secrets — never commit. (The real .env lives one level up, outside this repo.)
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# BareCode's own cache
+.barecode/
+
+# Test/demo scratch space
+tmp/
+fixtures/generated/
+
+# macOS
+.DS_Store

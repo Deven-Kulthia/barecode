@@ -1,0 +1,31 @@
+[project]
+name = "barecode"
+version = "0.1.0"
+description = "Offline supply-chain X-ray for Python environments. Zero dependencies."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.13"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  THE MANIFEST IS THE RULEBOOK.  EMPTY IS EMPTY.
+#
+#  BareCode has zero third-party runtime dependencies -- and zero third-party
+#  DEV dependencies either. Not one `pip install` is needed to build, run or
+#  test this project. There is deliberately no [build-system] table: the build
+#  is stdlib `zipapp`, so not even a build backend is required.
+#
+#  Verify it yourself, two ways, both offline:
+#      make prove    # AST-walks every source file and asserts every import
+#                    # is in sys.stdlib_module_names. Non-zero exit if not.
+#      make test     # stdlib `unittest`. No pytest.
+# ─────────────────────────────────────────────────────────────────────────────
+dependencies = []
+
+[project.optional-dependencies]
+# Intentionally empty. Python ships `unittest`, so the hackathon's
+# "dev-only test dependency" exception does not apply to us and is not used.
+dev = []
+
+[tool.barecode]
+# Where `make prove` looks for source to audit.
+source-roots = ["src", "tools", "tests"]

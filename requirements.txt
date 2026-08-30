@@ -1,0 +1,13 @@
+# BareCode has zero third-party runtime dependencies.
+#
+# This file is intentionally empty of requirements. It exists so that the
+# absence of dependencies is an affirmative statement rather than a missing
+# file. `pip install -r requirements.txt` installs nothing, successfully.
+#
+# Machine-checked proof (no network, no pip):
+#     make prove
+#
+# That command AST-walks every source file, collects every import, and asserts
+# each one is a member of sys.stdlib_module_names -- the interpreter's own
+# frozen list of what ships in the box. It exits non-zero if anything else
+# ever appears.
