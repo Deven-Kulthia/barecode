@@ -137,7 +137,7 @@ reimplementation.
 ## Also replaced, inside BareCode's own implementation
 
 Building this without dependencies meant replacing the libraries a tool like
-this normally imports. Fully documented in **[STDLIB.md](STDLIB.md)** — 15
+this normally imports. Fully documented in **[STDLIB.md](STDLIB.md)** — 17
 substitutions with rationale and limitations. The headline ones:
 
 | Normally | Instead |
@@ -146,7 +146,9 @@ substitutions with rationale and limitations. The headline ones:
 | `colorama` / `rich` | raw ANSI SGR + `NO_COLOR`/TTY precedence |
 | `packaging` (METADATA, PEP 503, PEP 508) | `email.parser`, `re` |
 | `networkx` | `dict` adjacency + `collections.deque` BFS |
-| `pytest` | `unittest` (54 tests) |
+| `deptry` / `pipreqs` (import discovery) | `ast` |
+| `toml` / `tomli` | `tomllib` |
+| `pytest` | `unittest` (79 tests) |
 | `pyinstaller` / `shiv` | `zipapp` |
 
 ## Limitations — what the killed tools still do better
