@@ -185,6 +185,22 @@ def _header(msg, *names: str) -> str:
     return ""
 
 
+def _licence(value: str) -> str:
+    """Reduce a License header to something usable as a grouping key.
+
+    `License-Expression` (PEP 639) is a clean SPDX identifier. The older
+    free-text `License` field is not: packages legitimately inline an entire
+    licence document, or an ASCII-art banner, into it. Truncating that to 64
+    characters yields a nonsense group name, so anything that clearly is not an
+    identifier gets bucketed rather than displayed.
+    """
+    if not value:
+        return ""
+    if len(value) > 40 or "====" in value or value.count(" ") > 6:
+        return "(unstructured text)"
+    return value
+
+
 def _read_dist_info(dist_info: Path) -> Package | None:
     metadata = dist_info / "METADATA"
     if not metadata.exists():
@@ -203,7 +219,7 @@ def _read_dist_info(dist_info: Path) -> Package | None:
         dist_info=dist_info,
         requires=tuple(" ".join(str(v).split()) for v in msg.get_all("Requires-Dist") or ()),
         summary=_header(msg, "Summary"),
-        licence=_header(msg, "License-Expression", "License")[:64],
+        licence=_licence(_header(msg, "License-Expression", "License")),
     )
 
     installer = dist_info / "INSTALLER"

@@ -136,6 +136,11 @@ def cmd_audit(args, style: Style, note) -> int:
     vcs = sorted(p.name for p in env.packages.values() if p.from_vcs)
     no_record = sorted(p.name for p in env.packages.values() if not p.record.exists())
 
+    licences: dict[str, list[str]] = {}
+    for pkg in env.packages.values():
+        licences.setdefault(pkg.licence or "(undeclared)", []).append(pkg.name)
+    ranked = sorted(licences.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+
     if args.json:
         print(
             json.dumps(
@@ -145,6 +150,7 @@ def cmd_audit(args, style: Style, note) -> int:
                     "installers": installers,
                     "installed_from_vcs_or_path": vcs,
                     "packages_without_record": no_record,
+                    "licences": {name: sorted(pkgs) for name, pkgs in licences.items()},
                     "pth_startup_hooks": [
                         {"file": str(p.path), "imports": list(p.import_lines)} for p in env.pth_files
                     ],
@@ -159,6 +165,8 @@ def cmd_audit(args, style: Style, note) -> int:
         print(f"  environment  : {env.site_packages}")
         print(f"  packages     : {len(env.packages)}")
         print(f"  installers   : {', '.join(f'{k}={v}' for k, v in sorted(installers.items())) or '(none)'}")
+        top = ", ".join(f"{name} ({len(pkgs)})" for name, pkgs in ranked[:4])
+        print(f"  licences     : {len(licences)} distinct — {top}")
 
         if vcs:
             print(style.warn(f"  provenance   : {len(vcs)} package(s) not from an index (git URL or local path)"))

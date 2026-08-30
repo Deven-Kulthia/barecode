@@ -2,7 +2,7 @@ BareCode — zero-dependency proof
 ================================================================
 python              : 3.14.4  (297 stdlib modules known)
 files scanned       : 11
-ast nodes walked    : 11,354
+ast nodes walked    : 11,551
 distinct imports    : 24
 
 stdlib imports      : 23 / 24
