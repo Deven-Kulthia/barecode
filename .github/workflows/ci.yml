@@ -1,0 +1,80 @@
+name: zero-dependency proof
+
+# Proves the claim on a clean machine, not just on the author's laptop.
+#
+# Note what this workflow does NOT contain: any `pip install` step. The only
+# setup is a Python interpreter. If BareCode ever grew a third-party import,
+# `make prove` would fail here and the badge would go red -- which is the point.
+#
+# The hackathon accepts "command output or a CI log showing zero third-party
+# deps" as the dependency proof. This is that log.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  zero-deps:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Show what is installed (nothing of ours)
+        run: |
+          python -VV
+          python -c "import sys; print(len(sys.stdlib_module_names), 'stdlib modules')"
+
+      - name: Prove zero third-party dependencies
+        run: make prove
+
+      - name: Run the test suite (stdlib unittest, no pytest)
+        run: make test
+
+      - name: Build the artifact in one step
+        run: make build
+
+      - name: Artifact runs on a clean machine
+        run: |
+          ./dist/barecode.pyz --version
+          ./dist/barecode.pyz audit -q
+          ./dist/barecode.pyz killable -q --json > /dev/null
+
+      - name: Exit codes are correct
+        run: |
+          set +e
+          ./dist/barecode.pyz > /dev/null 2>&1
+          test $? -eq 2 || { echo "no command should exit 2"; exit 1; }
+          ./dist/barecode.pyz why definitely-not-installed -q > /dev/null 2>&1
+          test $? -eq 3 || { echo "unknown package should exit 3"; exit 1; }
+          echo "exit codes OK"
+
+      - name: Detects a tampered package
+        run: |
+          set -e
+          python -m venv /tmp/victim
+          /tmp/victim/bin/pip install -q requests
+          SP=$(echo /tmp/victim/lib/python*/site-packages)
+          ./dist/barecode.pyz verify -p /tmp/victim -q   # clean: must exit 0
+          # Replace one character, preserving file length, so size and mtime
+          # checks would both still pass.
+          python - "$SP/requests/sessions.py" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); b = p.read_bytes()
+          i = b.find(b"HTTPAdapter"); assert i > 0
+          p.write_bytes(b[:i] + b"HTTPAdaptor" + b[i + 11:])
+          PY
+          set +e
+          ./dist/barecode.pyz verify -p /tmp/victim -q
+          test $? -eq 1 || { echo "tampering was NOT detected"; exit 1; }
+          echo "tamper detection OK"
