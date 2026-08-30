@@ -254,7 +254,41 @@ than failing.
 
 ---
 
-### 15. `filelock`, `watchdog`, `requests` → not needed at all
+### 15. `deptry` / `pipreqs` (import discovery) → `ast`
+
+**Normally:** `deptry` or `pipreqs` to find which packages a codebase imports.
+**Instead:** `ast.walk` over `ast.Import` / `ast.ImportFrom`, in
+`src/barecode/project.py`.
+
+Using the AST rather than a regex is the whole point: a module name inside a
+string literal or a comment is never mistaken for an import, and `import os.path`
+correctly reduces to `os`. Relative imports (`node.level > 0`) are skipped
+because they can only resolve inside the project.
+
+The harder half is mapping an import name to a distribution name — `import yaml`
+comes from `pyyaml`, `import cv2` from `opencv-python`. Rather than carry a
+hardcoded alias table that would be permanently out of date, we derive the map
+from the installed layout: `top_level.txt` when the installer wrote one,
+otherwise the first path segment of every `RECORD` entry. That is exact for the
+environment in front of us, which is the only environment we make claims about.
+
+---
+
+### 16. `toml` / `tomli` (reading `pyproject.toml`) → `tomllib`
+
+**Normally:** `toml` or `tomli` to read `pyproject.toml`.
+**Instead:** `tomllib` (3.11+), in `src/barecode/project.py` and the proof script.
+
+`tomli` was vendored into the standard library *as* `tomllib`, so this is the
+same parser without the install.
+
+**What we gave up:** `tomllib` is **read-only by design** and CPython has
+declined to add a writer. We only read, so it costs us nothing — but a project
+needing to *write* TOML has no stdlib option at all.
+
+---
+
+### 17. `filelock`, `watchdog`, `requests` → not needed at all
 
 The most effective substitution is the one you don't make. BareCode is
 offline-first by design: it makes **no network calls**, so there is no HTTP

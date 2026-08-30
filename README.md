@@ -54,6 +54,7 @@ without installing more packages to answer them.
 | `barecode audit` | What's in this environment, who installed it, what came from outside an index, and does anything execute code at interpreter startup? |
 | `barecode verify` | Do the installed files still match the hashes the installer recorded? |
 | `barecode why <pkg>` | Why is this package here? Which paths pull it in? What breaks if it's compromised? |
+| `barecode deps` | Do your declared, installed and actually-imported dependencies agree? |
 | `barecode killable` | Which of these could the standard library replace, and which genuinely couldn't? |
 
 Everything runs **fully offline.** No network calls, ever. Nothing from the
@@ -101,6 +102,7 @@ positional arguments:
               tampering)
     why       explain every reason a package is installed
     killable  which installed packages the standard library could replace
+    deps      compare declared vs installed vs actually-imported dependencies
 
 options:
   -h, --help  show this help message and exit
@@ -137,6 +139,12 @@ barecode verify --only requests
 
 # why is certifi installed, and what depends on it?
 barecode why certifi --blast
+
+# do declared, installed and imported agree?
+barecode deps
+
+# scan a source tree against a different environment
+barecode deps --project ./src -p ./.venv
 
 # machine-readable, for a CI gate
 barecode verify --json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["findings"]))'
@@ -190,6 +198,30 @@ $ barecode killable
 `killable` deliberately reports what **cannot** be replaced. A tool that claimed
 everything was replaceable would be lying to you.
 
+```console
+$ barecode deps
+BareCode deps
+  project      : /tmp/depdemo
+  declared in  : pyproject.toml
+  declared     : 2 package(s)
+  stdlib used  : 1 module(s)
+
+  missing (1) — imported but not installed:
+    nonexistent_lib          app.py
+
+  unused (1) — declared but never imported:
+    rich
+
+  phantom (1) — installed but undeclared:
+    pyjokes
+```
+
+Three sets that rarely agree. `missing` is an `ImportError` waiting for CI;
+`unused` is a dependency you can probably delete; `phantom` works on your
+machine and fails on a fresh install. Transitive dependencies of declared
+packages are **not** reported as phantom — only packages nothing declared can
+reach, which is what makes the finding trustworthy.
+
 ## Zero dependencies — verify it in five seconds
 
 ```console
@@ -226,7 +258,7 @@ same two checks run on a clean GitHub runner on every push — see the badge abo
 That workflow contains **no `pip install` step at all**; its only setup is a
 Python interpreter, so it would go red the moment a third-party import appeared.
 
-See **[STDLIB.md](STDLIB.md)** for all 15 package→stdlib substitutions, and
+See **[STDLIB.md](STDLIB.md)** for all 17 package→stdlib substitutions, and
 **[PACKAGE-KILLER.md](PACKAGE-KILLER.md)** for the feature comparison against
 the tools BareCode replaces.
 
@@ -249,15 +281,19 @@ finds it.
 ```
 cli.py         argparse subcommands, exit codes, JSON/human rendering
   ├── env.py         scan .dist-info: METADATA (email.parser), INSTALLER,
-  │                  direct_url.json provenance, .pth startup hooks
+  │                  direct_url.json provenance, .pth startup hooks, and the
+  │                  import-name -> distribution map derived from RECORD
   ├── integrity.py   re-hash RECORD entries (csv + hashlib.file_digest,
   │                  parallelised with concurrent.futures)
   ├── graph.py       PEP 508 requirement parsing, BFS `why` + blast radius
+  ├── project.py     declared deps (tomllib + requirements parser) vs actual
+  │                  imports (ast), and the three-way comparison
   ├── advisor.py     curated package -> stdlib table with confidence levels
   └── ansi.py        SGR styling, NO_COLOR/TTY precedence, width measurement
 
 tools/prove_zero_deps.py   the dependency proof (ast + sys.stdlib_module_names)
-tests/test_barecode.py     54 tests over synthetic .dist-info fixtures
+tests/test_barecode.py     79 tests over synthetic .dist-info fixtures
+.github/workflows/ci.yml   the same proof, on a clean runner, no pip install
 ```
 
 Data flows one way: scan → model → analyse → render. Analyzers never touch the
@@ -308,7 +344,7 @@ Files whose recorded size already differs are flagged without being hashed.
 
 ```console
 $ make test
-Ran 54 tests in 0.85s
+Ran 79 tests in 1.34s
 OK
 ```
 
@@ -322,10 +358,14 @@ deleted files; `RECORD` paths escaping the environment; console scripts outside
 containing commas; unhashed entries; missing `RECORD`; RFC 2047-encoded METADATA
 headers; multi-line licence fields; unreadable directories; dependency cycles;
 requirements on uninstalled packages; PEP 503 normalisation; PEP 508 parse forms;
-every exit code; `--fail-on` thresholds; JSON validity on all four commands;
-absence of ANSI escapes in JSON; stdout/stderr separation; `NO_COLOR`.
+PEP 621 and Poetry dependency tables; `requirements.txt` comments, options,
+markers and `-r` include cycles; import names that differ from distribution names
+(`import yaml` → `pyyaml`); module names appearing in strings and comments;
+transitive deps *not* being flagged as phantom; every exit code; `--fail-on`
+thresholds; JSON validity on all five commands; absence of ANSI escapes in JSON;
+stdout/stderr separation; `NO_COLOR`.
 
-`make check` runs the proof and the tests together — that's what CI should gate on.
+`make check` runs the proof and the tests together — that's what CI gates on.
 
 ## Limitations
 
@@ -345,8 +385,12 @@ hand-wavy one:
   markers verbatim and label edges conditional rather than guessing. See
   STDLIB.md §6.
 - **No CJK width handling** in column alignment. See STDLIB.md §3.
-- **Lockfile adapters** (`requirements.txt`, `poetry.lock`, `uv.lock`) are not in
-  this release. The environment is the source of truth today.
+- **Lockfiles are not read as declarations.** `poetry.lock` / `uv.lock` enumerate
+  the full transitive closure, so treating them as "declared" would make every
+  transitive package look intentional and destroy the unused/phantom
+  comparison. `deps` reads `pyproject.toml` and `requirements*.txt` only.
+- **`deps` cannot see dynamic imports.** `importlib.import_module(name)` with a
+  computed name is invisible to static analysis, so it may show up as `unused`.
 
 ## Licence
 

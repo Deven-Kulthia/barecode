@@ -18,6 +18,7 @@ pip/uv/poetry already produced, and degrade gracefully when they are absent.
 
 from __future__ import annotations
 
+import csv
 import json
 import re
 import sysconfig
@@ -253,3 +254,56 @@ def _pth_import_lines(path: Path) -> tuple[str, ...]:
         for line in text.splitlines()
         if line.startswith(("import ", "import\t"))
     )
+
+
+def top_level_modules(pkg: Package) -> set[str]:
+    """Import names a distribution actually provides.
+
+    The mapping from import name to distribution name is not derivable from the
+    name itself -- `import yaml` comes from `pyyaml`, `import cv2` from
+    `opencv-python`. Rather than carry a hardcoded alias table that would be
+    permanently out of date, we derive it from the installed layout:
+
+      * `top_level.txt`, when the installer wrote one; otherwise
+      * the first path segment of every RECORD entry, which is the package
+        directory or module file the distribution installed.
+
+    This is exact for the environment in front of us, which is the only
+    environment we make claims about.
+    """
+    explicit = pkg.dist_info / "top_level.txt"
+    if explicit.exists():
+        try:
+            names = {ln.strip() for ln in explicit.read_text(encoding="utf-8").splitlines() if ln.strip()}
+            if names:
+                return names
+        except OSError:
+            pass
+
+    if not pkg.record.exists():
+        return set()
+    modules: set[str] = set()
+    try:
+        with pkg.record.open("r", encoding="utf-8", newline="") as fh:
+            for row in csv.reader(fh):
+                if not row:
+                    continue
+                head = row[0].split("/")[0]
+                if head.startswith("..") or head.endswith((".dist-info", ".data")):
+                    continue
+                if head.endswith(".py"):
+                    modules.add(head[:-3])
+                elif "." not in head:
+                    modules.add(head)
+    except (OSError, csv.Error, UnicodeDecodeError):
+        return set()
+    return modules
+
+
+def provides_map(env: Environment) -> dict[str, str]:
+    """import name -> distribution name, for everything installed."""
+    mapping: dict[str, str] = {}
+    for pkg in env.packages.values():
+        for module in top_level_modules(pkg):
+            mapping.setdefault(module, pkg.name)
+    return mapping

@@ -21,7 +21,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from barecode import advisor, cli, env as envmod, graph as graphmod, integrity  # noqa: E402
+from barecode import advisor, cli, env as envmod, graph as graphmod, integrity, project as projectmod  # noqa: E402
 from barecode.ansi import Style, plain_len  # noqa: E402
 
 
@@ -467,6 +467,220 @@ class TestCLI(TempCase):
         text = parser.format_help()
         for command in cli.COMMANDS:
             self.assertIn(command, text)
+
+
+# ── project: declared vs installed vs imported ───────────────────────────────
+
+
+class TestDeclared(TempCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.proj = Path(self._tmp.name) / "proj"
+        self.proj.mkdir()
+
+    def write(self, name: str, text: str) -> None:
+        (self.proj / name).write_text(text, encoding="utf-8")
+
+    def test_pep621_dependencies_and_extras(self):
+        self.write(
+            "pyproject.toml",
+            '[project]\nname="x"\nversion="1"\n'
+            'dependencies=["requests>=2","Flask"]\n'
+            '[project.optional-dependencies]\ndev=["pytest"]\n',
+        )
+        dec = projectmod.declared_dependencies(self.proj)
+        self.assertEqual(dec.names, {"requests", "flask", "pytest"})
+        self.assertEqual(dec.sources, ["pyproject.toml"])
+
+    def test_poetry_tables_including_groups(self):
+        self.write(
+            "pyproject.toml",
+            "[tool.poetry.dependencies]\npython='^3.12'\nrequests='*'\n"
+            "[tool.poetry.group.dev.dependencies]\nblack='*'\n",
+        )
+        dec = projectmod.declared_dependencies(self.proj)
+        self.assertEqual(dec.names, {"requests", "black"})
+        self.assertNotIn("python", dec.names)
+
+    def test_requirements_txt_forms(self):
+        self.write(
+            "requirements.txt",
+            "# a comment\n\nrequests==2.31.0\n"
+            "Flask ; python_version > '3.8'\n"
+            "--index-url https://example.invalid/simple\n"
+            "-e .\n"
+            "urllib3  # trailing comment\n",
+        )
+        dec = projectmod.declared_dependencies(self.proj)
+        self.assertEqual(dec.names, {"requests", "flask", "urllib3"})
+
+    def test_requirements_include_is_followed(self):
+        self.write("requirements.txt", "-r base.txt\nrequests\n")
+        self.write("base.txt", "flask\n")
+        self.assertEqual(projectmod.declared_dependencies(self.proj).names, {"requests", "flask"})
+
+    def test_requirements_include_cycle_terminates(self):
+        self.write("requirements.txt", "-r other.txt\nrequests\n")
+        self.write("other.txt", "-r requirements.txt\nflask\n")
+        self.assertEqual(projectmod.declared_dependencies(self.proj).names, {"requests", "flask"})
+
+    def test_malformed_pyproject_is_reported_not_raised(self):
+        self.write("pyproject.toml", "this is not = = toml")
+        dec = projectmod.declared_dependencies(self.proj)
+        self.assertTrue(dec.problems)
+
+    def test_no_manifest_yields_no_sources(self):
+        self.assertEqual(projectmod.declared_dependencies(self.proj).sources, [])
+
+
+class TestImports(TempCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.proj = Path(self._tmp.name) / "proj"
+        self.proj.mkdir()
+
+    def test_ast_ignores_module_names_in_strings_and_comments(self):
+        (self.proj / "a.py").write_text(
+            'import requests\n'
+            '# import evil_from_comment\n'
+            's = "import evil_from_string"\n',
+            encoding="utf-8",
+        )
+        found = projectmod.imported_modules(self.proj)
+        self.assertIn("requests", found)
+        self.assertNotIn("evil_from_comment", found)
+        self.assertNotIn("evil_from_string", found)
+
+    def test_relative_imports_skipped(self):
+        (self.proj / "a.py").write_text("from . import sibling\nfrom .mod import thing\n", encoding="utf-8")
+        self.assertEqual(projectmod.imported_modules(self.proj), {})
+
+    def test_dotted_import_reduced_to_top_level(self):
+        (self.proj / "a.py").write_text("import os.path\nfrom xml.etree import ElementTree\n", encoding="utf-8")
+        self.assertEqual(set(projectmod.imported_modules(self.proj)), {"os", "xml"})
+
+    def test_venv_and_cache_dirs_skipped(self):
+        for skip in (".venv", "__pycache__", "node_modules"):
+            d = self.proj / skip
+            d.mkdir()
+            (d / "junk.py").write_text("import should_not_be_seen\n", encoding="utf-8")
+        (self.proj / "real.py").write_text("import requests\n", encoding="utf-8")
+        self.assertEqual(set(projectmod.imported_modules(self.proj)), {"requests"})
+
+    def test_syntax_error_in_project_file_is_skipped_not_fatal(self):
+        (self.proj / "broken.py").write_text("def (((\n", encoding="utf-8")
+        (self.proj / "fine.py").write_text("import requests\n", encoding="utf-8")
+        self.assertEqual(set(projectmod.imported_modules(self.proj)), {"requests"})
+
+    def test_first_party_names_from_root_and_src(self):
+        (self.proj / "mymod.py").write_text("", encoding="utf-8")
+        pkg = self.proj / "src" / "mypkg"
+        pkg.mkdir(parents=True)
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        self.assertEqual(projectmod.first_party_names(self.proj), {"mymod", "mypkg"})
+
+
+class TestDepAnalysis(TempCase):
+    """The three-set comparison, with a synthetic environment."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.proj = Path(self._tmp.name) / "proj"
+        self.proj.mkdir()
+
+    def build(self, declared: str, source: str):
+        (self.proj / "pyproject.toml").write_text(
+            f'[project]\nname="x"\nversion="1"\ndependencies=[{declared}]\n', encoding="utf-8"
+        )
+        (self.proj / "app.py").write_text(source, encoding="utf-8")
+        env = self.fx.scan()
+        g = graphmod.build(env)
+        return projectmod.analyse(self.proj, envmod.provides_map(env), set(env.packages), g.edges)
+
+    def test_clean_project(self):
+        self.fx.add("requests", files={"requests/__init__.py": b""})
+        report = self.build('"requests"', "import requests\nimport json\n")
+        self.assertTrue(report.clean, (report.unused, report.missing, report.phantom))
+        self.assertEqual(report.stdlib_used, ["json"])
+
+    def test_unused_declaration_detected(self):
+        self.fx.add("requests", files={"requests/__init__.py": b""})
+        self.fx.add("rich", files={"rich/__init__.py": b""})
+        report = self.build('"requests","rich"', "import requests\n")
+        self.assertEqual(report.unused, ["rich"])
+
+    def test_missing_import_detected(self):
+        report = self.build('""', "import totally_absent\n")
+        self.assertIn("totally_absent", report.missing)
+        self.assertEqual(report.missing["totally_absent"], ["app.py"])
+
+    def test_transitive_dependency_is_not_phantom(self):
+        """The false positive that would make this command untrustworthy."""
+        self.fx.add("requests", requires=("certifi",), files={"requests/__init__.py": b""})
+        self.fx.add("certifi", files={"certifi/__init__.py": b""})
+        report = self.build('"requests"', "import requests\n")
+        self.assertEqual(report.phantom, [], "certifi is a legitimate transitive dep")
+
+    def test_genuinely_undeclared_package_is_phantom(self):
+        self.fx.add("requests", files={"requests/__init__.py": b""})
+        self.fx.add("pyjokes", files={"pyjokes/__init__.py": b""})
+        report = self.build('"requests"', "import requests\n")
+        self.assertEqual(report.phantom, ["pyjokes"])
+
+    def test_bootstrap_packages_are_never_phantom(self):
+        self.fx.add("requests", files={"requests/__init__.py": b""})
+        for name in ("pip", "setuptools", "wheel"):
+            self.fx.add(name, files={f"{name}/__init__.py": b""})
+        report = self.build('"requests"', "import requests\n")
+        self.assertEqual(report.phantom, [])
+
+    def test_no_declaration_means_no_phantom_claims(self):
+        self.fx.add("anything", files={"anything/__init__.py": b""})
+        (self.proj / "app.py").write_text("import json\n", encoding="utf-8")
+        env = self.fx.scan()
+        report = projectmod.analyse(self.proj, envmod.provides_map(env), set(env.packages), {})
+        self.assertEqual(report.phantom, [])
+
+    def test_import_name_differing_from_distribution_name(self):
+        """`import yaml` must resolve to the `pyyaml` distribution."""
+        self.fx.add("pyyaml", files={"yaml/__init__.py": b""})
+        report = self.build('"pyyaml"', "import yaml\n")
+        self.assertTrue(report.clean, (report.unused, report.missing, report.phantom))
+
+    def test_top_level_txt_is_preferred_when_present(self):
+        dist = self.fx.add("weird", files={"actual_module/__init__.py": b""})
+        (dist / "top_level.txt").write_text("declared_name\n", encoding="utf-8")
+        pkg = self.fx.scan().get("weird")
+        self.assertEqual(envmod.top_level_modules(pkg), {"declared_name"})
+
+    def test_provides_map_derived_from_record(self):
+        self.fx.add("pyyaml", files={"yaml/__init__.py": b"", "yaml/parser.py": b""})
+        self.assertEqual(envmod.provides_map(self.fx.scan()).get("yaml"), "pyyaml")
+
+
+class TestDepsCLI(TempCase):
+    def run_cli(self, *argv: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = cli.main(list(argv))
+        return code, out.getvalue(), err.getvalue()
+
+    def test_missing_import_exits_one_and_json_is_valid(self):
+        proj = Path(self._tmp.name) / "proj"
+        proj.mkdir()
+        (proj / "pyproject.toml").write_text(
+            '[project]\nname="x"\nversion="1"\ndependencies=["absent-dist"]\n', encoding="utf-8"
+        )
+        (proj / "app.py").write_text("import absent_module\n", encoding="utf-8")
+        code, out, _ = self.run_cli("deps", "-p", str(self.fx.site), "--project", str(proj), "-q", "--json")
+        self.assertEqual(code, cli.EXIT_FINDINGS)
+        payload = json.loads(out)
+        self.assertIn("absent_module", payload["missing"])
+
+    def test_nonexistent_project_dir_exits_env_error(self):
+        code, _, err = self.run_cli("deps", "--project", "/no/such/dir", "-q")
+        self.assertEqual(code, cli.EXIT_ENV)
+        self.assertIn("not a directory", err)
 
 
 if __name__ == "__main__":

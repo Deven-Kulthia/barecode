@@ -19,7 +19,14 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, advisor, env as envmod, graph as graphmod, integrity
+from . import (
+    __version__,
+    advisor,
+    env as envmod,
+    graph as graphmod,
+    integrity,
+    project as projectmod,
+)
 from .ansi import Style
 
 EXIT_OK = 0
@@ -106,6 +113,20 @@ def build_parser() -> argparse.ArgumentParser:
         description="Cross-reference the environment against a curated package -> stdlib table. "
         "Reports what is a drop-in replacement, what only covers the common path, and what "
         "genuinely has no stdlib equivalent.",
+    )
+
+    d = subs.add_parser(
+        "deps",
+        parents=[common],
+        help="compare declared vs installed vs actually-imported dependencies",
+        description="Three sets that rarely agree: what pyproject.toml/requirements.txt declare, "
+        "what is installed, and what the source actually imports. Reports unused declarations, "
+        "missing imports, and phantom packages that are installed but undeclared.",
+    )
+    d.add_argument(
+        "--project",
+        metavar="DIR",
+        help="project source root to scan for imports (default: the --path value)",
     )
 
     return ap
@@ -354,7 +375,83 @@ def cmd_killable(args, style: Style, note) -> int:
     return EXIT_OK
 
 
-COMMANDS = {"audit": cmd_audit, "verify": cmd_verify, "why": cmd_why, "killable": cmd_killable}
+def cmd_deps(args, style: Style, note) -> int:
+    project = Path(args.project or args.path)
+    if not project.is_dir():
+        print(f"error: {project} is not a directory", file=sys.stderr)
+        return EXIT_ENV
+
+    env = resolve_environment(args.path, note)
+    g = graphmod.build(env)
+    report = projectmod.analyse(project, envmod.provides_map(env), set(env.packages), g.edges)
+    dec = report.declared
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "project": str(project),
+                    "declared_in": dec.sources,
+                    "declared": sorted(dec.names),
+                    "unused": report.unused,
+                    "missing": report.missing,
+                    "phantom": report.phantom,
+                    "stdlib_modules_used": report.stdlib_used,
+                    "problems": dec.problems,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    else:
+        print(style.head("BareCode deps"))
+        print(f"  project      : {project}")
+        print(f"  declared in  : {', '.join(dec.sources) or style.warn('nothing found')}")
+        print(f"  declared     : {len(dec.names)} package(s)")
+        print(f"  stdlib used  : {len(report.stdlib_used)} module(s)")
+        print()
+
+        if not dec.sources:
+            print(style.warn("  no pyproject.toml or requirements*.txt found — nothing to compare against"))
+            print(style.faint("  point --project at the source root, or -p at the environment"))
+            return EXIT_OK
+
+        if report.missing:
+            print(style.bad(f"  missing ({len(report.missing)}) — imported but not installed:"))
+            for module, files in sorted(report.missing.items()):
+                where = files[0] + (f" +{len(files) - 1} more" if len(files) > 1 else "")
+                print(f"    {module:<24} {style.faint(where)}")
+            print()
+        if report.unused:
+            print(style.warn(f"  unused ({len(report.unused)}) — declared but never imported:"))
+            for name in report.unused:
+                print(f"    {name}")
+            print()
+        if report.phantom:
+            print(style.warn(f"  phantom ({len(report.phantom)}) — installed but undeclared:"))
+            for name in report.phantom[:15]:
+                print(f"    {name}")
+            if len(report.phantom) > 15:
+                print(style.faint(f"    ... and {len(report.phantom) - 15} more"))
+            print()
+        if report.clean:
+            print(style.ok("  ✓ declared, installed and imported all agree"))
+        for problem in dec.problems:
+            print(style.warn(f"  note: {problem}"))
+
+    if report.clean:
+        return EXIT_OK
+    worst = "critical" if report.missing else "warning"
+    return EXIT_FINDINGS if SEVERITY_ORDER.index(worst) >= SEVERITY_ORDER.index(args.fail_on) else EXIT_OK
+
+
+COMMANDS = {
+    "audit": cmd_audit,
+    "verify": cmd_verify,
+    "why": cmd_why,
+    "killable": cmd_killable,
+    "deps": cmd_deps,
+}
 
 
 def main(argv: list[str] | None = None) -> int:

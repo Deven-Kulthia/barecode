@@ -15,7 +15,7 @@ To answer "what is in my environment and is it safe", the normal advice is to
 install more packages:
 
 ```console
-pip install pipdeptree pip-licenses pip-check johnnydep
+pip install pipdeptree pip-licenses deptry johnnydep
 ```
 
 That is four new distributions, plus their transitive dependencies, added to the
@@ -80,6 +80,31 @@ any environment from outside with `-p`, and never imports from it.
 Real environments contain packages that inline an entire licence document — or an
 ASCII banner — into the free-text `License:` header. We bucket those rather than
 printing a 400-character "licence name".
+
+## Third kill: `deptry` / `pipreqs` / `pip-check`
+
+`barecode deps` compares three sets that rarely agree — declared, installed, and
+actually imported.
+
+| Capability | `deptry` | `pipreqs` | BareCode |
+|---|---|---|---|
+| Unused declared dependencies | ✅ | ❌ | ✅ |
+| Imported but not installed | ✅ | ❌ | ✅ |
+| Installed but undeclared ("phantom") | ✅ | ❌ | ✅ |
+| Generates a requirements file from imports | ❌ | ✅ | ❌ |
+| AST-based (not regex) import detection | ✅ | ⚠️ | ✅ |
+| Import name → distribution mapping | via table | via table | **derived from installed `RECORD`/`top_level.txt`** |
+| Excludes legitimate transitive deps from phantom | ✅ | — | ✅ |
+| PEP 621 + Poetry + `requirements*.txt` | ✅ | ⚠️ | ✅ |
+| Follows `-r` includes (cycle-safe) | ✅ | ❌ | ✅ |
+| **Third-party dependencies** | several | several | **zero** |
+
+One design difference worth stating: mapping `import yaml` to the `pyyaml`
+distribution normally needs a maintained alias table. We derive it from the
+environment itself — `top_level.txt` when the installer wrote one, otherwise the
+first path segment of each `RECORD` entry. That is exact for the environment in
+front of us and can never go stale, though it means we can say nothing about a
+package that is not installed.
 
 ## Not a kill — a gap: `verify`
 
