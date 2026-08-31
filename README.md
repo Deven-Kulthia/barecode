@@ -362,7 +362,7 @@ unpacking the zipapp — not just the analysis:
 | `audit` — 190 packages | ~0.8 s |
 | `verify` — 190 packages, **4,927 files hashed** | **3.4 s** |
 | `killable` — graph over 190 packages | ~0.5 s |
-| Artifact size | 27 KB |
+| Artifact size | 66 KB |
 
 `verify` is I/O bound. `hashlib.file_digest` releases the GIL while reading, so a
 `ThreadPoolExecutor` sized from `os.process_cpu_count()` gives real parallelism.

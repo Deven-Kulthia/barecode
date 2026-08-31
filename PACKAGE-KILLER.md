@@ -185,7 +185,7 @@ auditor it is a correctness argument:
    arrive through the same package channel that was compromised.
 3. **It runs where you need it.** No install step means it works in a locked-down
    CI image, an air-gapped box, or a container you cannot `pip install` into.
-   Copy one 27 KB file.
+   Copy one 66 KB file.
 4. **It is auditable in an afternoon.** ~1,000 lines of stdlib Python you can
    read end to end. You cannot say that about the transitive closure of four
    inspection tools.
