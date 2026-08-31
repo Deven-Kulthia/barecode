@@ -26,7 +26,7 @@ maintainer account and shipped ~444 poisoned packages *with valid build
 provenance* — an auditing tool that arrives through the same channel it is
 auditing offers no independent assurance.
 
-BareCode is a single 27 KB file with an empty manifest. It cannot be
+BareCode is a single 66 KB file with an empty manifest. It cannot be
 supply-chain-attacked through its dependencies because it has none.
 
 ```console

@@ -9,9 +9,9 @@
 ```console
 $ barecode verify
 BareCode verify
-  environment  : /tmp/project/.venv/lib/python3.14/site-packages
-  packages     : 6 verified, 0 skipped
-  files hashed : 596  (489 entries carry no hash to check)
+  environment  : /tmp/barecode-demo/lib/python3.14/site-packages
+  packages     : 7 verified, 0 skipped
+  files hashed : 621  (507 entries carry no hash to check)
 
   ✗ 1 finding(s) across 1 package(s)
 
@@ -67,7 +67,7 @@ Requires **Python ≥3.13** and nothing else. Developed and tested on 3.14.4.
 ```console
 git clone https://github.com/Deven-Kulthia/barecode
 cd barecode
-make build            # one step -> dist/barecode.pyz (27 KB)
+make build            # one step -> dist/barecode.pyz (66 KB)
 ./dist/barecode.pyz audit
 ```
 
@@ -201,7 +201,7 @@ everything was replaceable would be lying to you.
 ```console
 $ barecode deps
 BareCode deps
-  project      : /tmp/depdemo
+  project      : /tmp/barecode-deps-demo
   declared in  : pyproject.toml
   declared     : 2 package(s)
   stdlib used  : 1 module(s)
@@ -266,23 +266,29 @@ the tools BareCode replaces.
 
 ```console
 $ make repro
-  build 1: c28da598fb7c3696595140cea49c8741afa9da42cb7d562e4d09490da896ec12
-  build 2: c28da598fb7c3696595140cea49c8741afa9da42cb7d562e4d09490da896ec12
+  build 1: efce2ebefdb2952532aad19195bbf8327c60378de1eacbbb81fb9401f9f00036
+  build 2: efce2ebefdb2952532aad19195bbf8327c60378de1eacbbb81fb9401f9f00036
 
   BYTE-IDENTICAL — reproducible build verified
 ```
 
-Builds the artifact twice from a clean tree and asserts the results are
-byte-identical, printing both hashes. **Scope: same machine, same toolchain** —
-cross-environment reproducibility is not claimed, because a fresh `git clone`
-sets new file mtimes and `zipapp` stores those in the archive.
+The build stages sources into a temp directory, normalises every timestamp to a
+fixed epoch, and writes the archive's `__main__.py` itself rather than letting
+`zipapp -m` generate it — because `zipapp` stamps that one entry with the
+*current time*, which made two builds a second apart differ.
 
-One non-obvious detail this target had to handle: a leftover `__pycache__` gets
-deleted during the first build, which bumps `src/barecode/`'s directory mtime and
-makes build 2 differ through no fault of the source. `make repro` therefore starts
-from `make clean`. The same reason is why `make build` strips `__pycache__` before
-zipping at all — otherwise the artifact is 66 KB or 170 KB depending on whether
-you ran the tests first.
+The artifact is therefore a pure function of source content. It is byte-identical
+across a clean rebuild, and **also across a fresh `git clone` into a different
+directory**, which is stronger than the bonus requires (the FAQ scope is same
+machine, same toolchain).
+
+Verify it yourself:
+
+```console
+$ git clone https://github.com/Deven-Kulthia/barecode /tmp/check
+$ cd /tmp/check && make build && shasum -a 256 dist/barecode.pyz
+efce2ebefdb2952532aad19195bbf8327c60378de1eacbbb81fb9401f9f00036  dist/barecode.pyz
+```
 
 ## Reproduce the tamper detection yourself
 

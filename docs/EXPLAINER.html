@@ -236,7 +236,7 @@ synthesised on disk — real <code>.dist-info</code> directories with real RECOR
 <tr><th>Bonus</th><th>Pts</th><th>Evidence</th></tr>
 <tr><td>STDLIB Log</td><td>+3</td><td><code>STDLIB.md</code> — 17 substitutions, each with a rationale and the limitation it inherits. Requirement is ≥10.</td></tr>
 <tr><td>Package Killer</td><td>+3</td><td><code>PACKAGE-KILLER.md</code> — feature matrices against <code>pipdeptree</code>, <code>pip-licenses</code> and <code>deptry</code>/<code>pipreqs</code>, <em>including what they still do better</em>.</td></tr>
-<tr><td>Reproducible Build</td><td>+5</td><td><code>make repro</code> builds twice from a clean tree, asserts byte-identical output, prints both SHA-256 hashes. Scope per the FAQ: same machine, same toolchain.</td></tr>
+<tr><td>Reproducible Build</td><td>+5</td><td><code>make repro</code> builds twice and asserts byte-identical output. Timestamps are normalised to a fixed epoch during staging and we write <code>__main__.py</code> ourselves (<code>zipapp&nbsp;-m</code> stamps it with the current time), so the artifact is a pure function of source content — byte-identical even across a fresh clone. <code>sha256 efce2ebefdb2952532aad191…</code></td></tr>
 <tr><td class="small">Single File <em>(declined)</em></td><td class="small">+5</td><td class="small">A single 3,000-line file would cost more under Code Quality &amp; Idiom (25% of the score) than the +5 gains. Declared as declined in <code>.zero-dep.toml</code> rather than half-attempted.</td></tr>
 </table>
 

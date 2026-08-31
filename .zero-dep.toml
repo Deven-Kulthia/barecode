@@ -18,4 +18,4 @@ single-file = "Rejected: a single 3k-line file would cost more under Code Qualit
 [bonus-evidence]
 stdlib-log = "STDLIB.md — 17 substitutions, each with rationale and the limitation it inherits."
 package-killer = "PACKAGE-KILLER.md — feature matrices vs pipdeptree, pip-licenses, deptry/pipreqs, including what they still do better."
-reproducible-build = "`make repro` builds twice from a clean tree and asserts byte-identical output, printing both SHA-256 hashes. Scope is same machine + same toolchain, per the FAQ; cross-environment reproducibility is not claimed."
+reproducible-build = "`make repro` builds twice and asserts byte-identical output, printing both SHA-256 hashes. Timestamps are normalised to a fixed epoch during staging, so the artifact is a pure function of source content: sha256 efce2ebefdb2952532aad19195bbf8327c60378de1eacbbb81fb9401f9f00036, reproducible even across a fresh clone into a different directory."
