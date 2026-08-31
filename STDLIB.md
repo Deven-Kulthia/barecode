@@ -220,7 +220,7 @@ stream discipline.
 ### 13. `pyinstaller` / `shiv` / `pex` → `zipapp`
 
 **Normally:** a packaging tool to produce a single runnable file.
-**Instead:** `python -m zipapp` in the `Makefile`, producing a 27 KB executable
+**Instead:** `python -m zipapp` in the `Makefile`, producing a 66 KB executable
 `dist/barecode.pyz` with a `/usr/bin/env python3` shebang.
 
 This also means **`pyproject.toml` has no `[build-system]` table at all** — not
