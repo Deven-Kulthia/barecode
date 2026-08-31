@@ -25,17 +25,36 @@ help:
 # ── build ────────────────────────────────────────────────────────────────────
 # One command, one artifact. `zipapp` is stdlib, so there is no build backend
 # and no third-party packaging tool anywhere in this pipeline.
+#
+# The build stages sources into a temp directory and normalises every timestamp
+# to a fixed epoch before zipping. Two reasons:
+#   1. zipapp stores each file's mtime in the archive, so without this the output
+#      depends on when files were touched -- including the directory mtime bump
+#      you get from deleting a stale __pycache__. Builds would differ for reasons
+#      that have nothing to do with the source.
+#   2. It makes the artifact a pure function of source *content*, so `make repro`
+#      is byte-identical even from a fresh clone, not just on this machine.
+SOURCE_EPOCH := 202608281800
+STAGE        := $(DIST)/.stage
+
 build: $(PYZ)
 
 $(PYZ): $(PYSRC)
 	@mkdir -p $(DIST)
-	@# Running the tests imports from src/, which leaves __pycache__ behind.
-	@# zipapp would silently bundle those .pyc files: a 6x larger artifact whose
-	@# size depends on whether you ran the tests first. Strip them so the build
-	@# depends only on the source.
-	@find $(SRC) -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
-	$(PY) -m zipapp $(SRC) -o $(PYZ) -p '/usr/bin/env python3' -m '$(PKG).cli:run'
+	@rm -rf $(STAGE)
+	@mkdir -p $(STAGE)
+	@cd $(SRC) && find . -name '__pycache__' -prune -o -type f -name '*.py' -print \
+	  | while read -r f; do mkdir -p "../$(STAGE)/$$(dirname "$$f")"; cp "$$f" "../$(STAGE)/$$f"; done
+	@find $(STAGE) -exec touch -t $(SOURCE_EPOCH) {} +
+	@# zipapp's own `-m` flag writes the archive's __main__.py with writestr(),
+	@# which stamps it with the CURRENT TIME -- so two builds a second apart
+	@# differ. We supply __main__.py ourselves and omit -m, so every entry in the
+	@# archive is a real file carrying the fixed epoch above.
+	@printf 'import barecode.cli\nbarecode.cli.run()\n' > $(STAGE)/__main__.py
+	@touch -t $(SOURCE_EPOCH) $(STAGE)/__main__.py $(STAGE)
+	$(PY) -m zipapp $(STAGE) -o $(PYZ) -p '/usr/bin/env python3'
 	@chmod +x $(PYZ)
+	@rm -rf $(STAGE)
 	@printf '\n  built %s (%s bytes)\n  run it: ./%s audit\n\n' \
 	  "$(PYZ)" "$$(wc -c < $(PYZ) | tr -d ' ')" "$(PYZ)"
 
@@ -64,10 +83,6 @@ all: prove test build
 # we do not claim it -- a fresh `git clone` sets new file mtimes, which zipapp
 # stores in the archive.
 repro:
-	@# Start from a genuinely clean tree. Deleting a leftover __pycache__ during
-	@# the first build would bump src/barecode/'s directory mtime, and zipapp
-	@# stores directory mtimes -- so build 1 and build 2 would legitimately differ
-	@# through no fault of the source.
 	@$(MAKE) --no-print-directory clean >/dev/null
 	@$(MAKE) --no-print-directory build >/dev/null
 	@mv $(PYZ) $(DIST)/build-1.pyz
