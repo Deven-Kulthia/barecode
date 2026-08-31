@@ -8,10 +8,14 @@ language = "python"
 runtime = "CPython 3.14 (works on >=3.11)"
 
 # Bonus challenges we claim. See STDLIB.md and PACKAGE-KILLER.md.
-bonuses = ["stdlib-log", "package-killer"]
+bonuses = ["stdlib-log", "package-killer", "reproducible-build"]
 
 # Bonuses we deliberately do NOT claim, and why -- stated up front rather than
 # half-done, per the organisers' "don't half-do all four".
 [bonuses-declined]
 single-file = "Rejected: a single 3k-line file would cost more under Code Quality & Idiom (25%) than the +5 gains."
-reproducible-build = "Rejected as hollow: Python has no compile step, so 'build twice, byte-identical' proves little. Not claimed rather than half-claimed."
+
+[bonus-evidence]
+stdlib-log = "STDLIB.md — 17 substitutions, each with rationale and the limitation it inherits."
+package-killer = "PACKAGE-KILLER.md — feature matrices vs pipdeptree, pip-licenses, deptry/pipreqs, including what they still do better."
+reproducible-build = "`make repro` builds twice from a clean tree and asserts byte-identical output, printing both SHA-256 hashes. Scope is same machine + same toolchain, per the FAQ; cross-environment reproducibility is not claimed."

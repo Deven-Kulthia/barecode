@@ -262,6 +262,28 @@ See **[STDLIB.md](STDLIB.md)** for all 17 package→stdlib substitutions, and
 **[PACKAGE-KILLER.md](PACKAGE-KILLER.md)** for the feature comparison against
 the tools BareCode replaces.
 
+## Reproducible build
+
+```console
+$ make repro
+  build 1: c28da598fb7c3696595140cea49c8741afa9da42cb7d562e4d09490da896ec12
+  build 2: c28da598fb7c3696595140cea49c8741afa9da42cb7d562e4d09490da896ec12
+
+  BYTE-IDENTICAL — reproducible build verified
+```
+
+Builds the artifact twice from a clean tree and asserts the results are
+byte-identical, printing both hashes. **Scope: same machine, same toolchain** —
+cross-environment reproducibility is not claimed, because a fresh `git clone`
+sets new file mtimes and `zipapp` stores those in the archive.
+
+One non-obvious detail this target had to handle: a leftover `__pycache__` gets
+deleted during the first build, which bumps `src/barecode/`'s directory mtime and
+makes build 2 differ through no fault of the source. `make repro` therefore starts
+from `make clean`. The same reason is why `make build` strips `__pycache__` before
+zipping at all — otherwise the artifact is 66 KB or 170 KB depending on whether
+you ran the tests first.
+
 ## Reproduce the tamper detection yourself
 
 ```console

@@ -15,6 +15,7 @@
 set -euo pipefail
 
 VENV="${VENV:-/tmp/barecode-demo}"
+PROJ="${PROJ:-/tmp/barecode-deps-demo}"
 PKG="requests"
 BC="./dist/barecode.pyz"
 
@@ -23,12 +24,37 @@ target() { echo "$(site_packages)/$PKG/sessions.py"; }
 
 case "${1:-}" in
 setup)
-  rm -rf "$VENV"
+  rm -rf "$VENV" "$PROJ"
   python3 -m venv "$VENV"
-  "$VENV/bin/pip" install -q "$PKG"
+  # pyjokes is installed but never declared by the demo project below, which is
+  # what makes it a genuine "phantom" finding rather than a transitive dep.
+  "$VENV/bin/pip" install -q "$PKG" pyjokes
+
+  mkdir -p "$PROJ"
+  cat > "$PROJ/pyproject.toml" <<'TOML'
+[project]
+name = "example-app"
+version = "1.0.0"
+dependencies = ["requests", "rich"]
+TOML
+  cat > "$PROJ/app.py" <<'PY'
+import json
+
+import requests
+
+import nonexistent_lib
+
+
+def fetch(url):
+    return json.loads(requests.get(url).text)
+PY
+
   make build >/dev/null
-  echo "ready: $VENV  ($("$VENV/bin/pip" list --format=freeze | wc -l | tr -d ' ') packages)"
-  echo "try:   $BC audit -p $VENV"
+  echo "ready:"
+  echo "  env     $VENV"
+  echo "  project $PROJ"
+  echo "try:    $BC audit -p $VENV"
+  echo "        $BC deps --project $PROJ -p $VENV"
   ;;
 
 poison)
@@ -53,8 +79,8 @@ restore)
   ;;
 
 clean)
-  rm -rf "$VENV"
-  echo "removed $VENV"
+  rm -rf "$VENV" "$PROJ"
+  echo "removed $VENV and $PROJ"
   ;;
 
 *)
