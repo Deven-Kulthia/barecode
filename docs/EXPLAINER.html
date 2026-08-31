@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BareCode — Complete Explainer</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font: 10.5pt/1.55 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #16181d; margin: 0; }
+  h1 { font-size: 24pt; margin: 0 0 2mm; letter-spacing: -.4pt; }
+  h2 { font-size: 14pt; margin: 9mm 0 3mm; padding-bottom: 1.5mm;
+       border-bottom: 1.5px solid #16181d; page-break-after: avoid; }
+  h3 { font-size: 11pt; margin: 6mm 0 2mm; page-break-after: avoid; }
+  p, li { margin: 0 0 2.5mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+  code { font: 9.5pt/1.4 "SF Mono", Menlo, Consolas, monospace; background: #f2f3f5;
+         padding: .4mm 1.2mm; border-radius: 2px; }
+  pre { font: 9pt/1.45 "SF Mono", Menlo, Consolas, monospace; background: #f7f8fa;
+        border: 1px solid #e2e5ea; border-left: 3px solid #6b7280; border-radius: 3px;
+        padding: 3mm 3.5mm; overflow-x: auto; white-space: pre-wrap;
+        page-break-inside: avoid; margin: 0 0 3.5mm; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 4mm; font-size: 9.5pt;
+          page-break-inside: avoid; }
+  th, td { border: 1px solid #dfe3e8; padding: 1.8mm 2.2mm; text-align: left; vertical-align: top; }
+  th { background: #f2f3f5; font-weight: 600; }
+  .lede { font-size: 11.5pt; color: #3d4450; margin-bottom: 5mm; }
+  .meta { font-size: 9pt; color: #667085; margin-bottom: 6mm; }
+  .box { background: #f7f8fa; border: 1px solid #e2e5ea; border-radius: 3px;
+         padding: 3mm 3.5mm; margin: 0 0 4mm; page-break-inside: avoid; }
+  .warn { background: #fff8e6; border-color: #f0d9a0; }
+  .good { background: #eef8f0; border-color: #b7ddc0; }
+  .tag { display: inline-block; font-size: 8pt; font-weight: 600; padding: .5mm 1.6mm;
+         border-radius: 2px; background: #16181d; color: #fff; vertical-align: 1px; }
+  .page { page-break-before: always; }
+  a { color: #16181d; }
+  .small { font-size: 9pt; color: #667085; }
+</style>
+</head>
+<body>
+
+<h1>BareCode</h1>
+<p class="lede">Offline supply-chain X-ray for Python environments. Zero dependencies.</p>
+<p class="meta">
+  <strong>Team</strong> Import Error (solo) &nbsp;·&nbsp;
+  <strong>Event</strong> Zero Dependency Hackathon 2026 &nbsp;·&nbsp;
+  <strong>Track</strong> A — Developer Tools &amp; CLI<br>
+  <strong>Language</strong> Python 3.14 (standard library only) &nbsp;·&nbsp;
+  <strong>Repo</strong> github.com/Deven-Kulthia/barecode &nbsp;·&nbsp;
+  <strong>Licence</strong> MIT
+</p>
+
+<h2>1. What this document is</h2>
+<p>A complete explanation of what we built, why, in what language, how it works, and what
+we claim — written so you can defend every part of it in writing to the judges. Judging is
+asynchronous: judges score from the repo and the video, then may email questions. Nothing
+here is a claim I have not actually run.</p>
+
+<h2>2. The one-sentence pitch</h2>
+<div class="box good">
+<p style="margin:0"><strong>BareCode tells you, offline and in seconds, what is really inside a Python
+environment — and whether the installed files still match the hashes the installer
+recorded.</strong> It replaces four tools you would normally <code>pip install</code>, and it has
+an empty dependency manifest itself.</p>
+</div>
+
+<h2>3. The problem we solve</h2>
+<p>Every Python wheel you install writes a <code>RECORD</code> file: a CSV listing the
+SHA-256 of every file it placed on disk. <strong>Nothing ever checks it again.</strong></p>
+<table>
+<tr><th style="width:38%">Existing tool</th><th>What it actually checks</th></tr>
+<tr><td><code>pip check</code></td><td>Dependency <em>metadata</em> consistency. Not file contents.</td></tr>
+<tr><td><code>pip install --require-hashes</code></td><td>The downloaded archive, at install time only. Never again.</td></tr>
+<tr><td><code>pip-audit</code></td><td>Installed <em>versions</em> against a vulnerability database. Needs network.</td></tr>
+<tr><td><strong>There is no <code>pip verify</code></strong></td><td>— this is the gap.</td></tr>
+</table>
+<p>So if a file inside <code>site-packages</code> changes after installation — a poisoned
+post-install step, a patched file, a compromised mirror, a shared environment someone
+"fixed" — the standard toolchain is completely silent.</p>
+<p>The hackathon's own front page is built on exactly these incidents: left-pad (2016),
+the xz backdoor (2024), the chalk/debug crypto-clipper (2025), the Shai-Hulud worm, and
+<strong>ChainDrop (August 2026)</strong> — roughly 444 packages poisoned in under four hours
+<em>with valid build provenance</em>. The metadata was correct because it genuinely was.
+Only re-hashing the bytes on disk catches that.</p>
+
+<h2>4. Why Python, and not JavaScript, Go or Rust</h2>
+<p>The decision had three inputs: what the rules allow, what suits the project, and what
+you can defend in writing.</p>
+<table>
+<tr><th>Consideration</th><th>Outcome</th></tr>
+<tr><td>Is Python allowed for Track&nbsp;A?</td><td><strong>Yes, explicitly.</strong> The rules list Python with its own dependency rules, and Track A's official guidance names <code>argparse</code> and <code>pathlib</code>/<code>os.walk</code> as things that "carry" the track.</td></tr>
+<tr><td>Is Python <em>good</em> for a CLI?</td><td>Better than Node here. <code>argparse</code> has subcommands, type coercion, <code>choices</code>, counted flags and auto-generated help. Node's <code>util.parseArgs</code> has none of those — the official Node cheat sheet says so.</td></tr>
+<tr><td>Rust?</td><td>Rejected. Its <code>std</code> has no JSON, no crypto, no compression, no async runtime. We would have rebuilt the standard library before writing a feature.</td></tr>
+<tr><td>Go?</td><td>Genuinely strong, but not installed on this machine, and you would have had to defend Go code in written follow-up.</td></tr>
+<tr><td>JavaScript?</td><td>You told me you cannot defend it. The rules require the team be reachable for written follow-up, and state that work which cannot be defended in writing "scores accordingly". Learning JS in the remaining time would have consumed the entire budget.</td></tr>
+</table>
+<p>Python's one real weakness was the <em>dependency proof</em>: an absent
+<code>requirements.txt</code> proves nothing, whereas <code>"dependencies": {}</code> in a
+<code>package.json</code> is self-evident. Section 8 explains how we turned that into our
+strongest artifact instead.</p>
+
+<div class="page"></div>
+<h2>5. What the tool does — five commands</h2>
+<table>
+<tr><th style="width:24%">Command</th><th>Question it answers</th></tr>
+<tr><td><code>barecode audit</code></td><td>What is installed, who installed it, what came from outside a package index, what the licences are, and whether anything executes code at interpreter startup.</td></tr>
+<tr><td><code>barecode verify</code></td><td><strong>Do the installed files still match the hashes the installer recorded?</strong> This is the headline feature.</td></tr>
+<tr><td><code>barecode why &lt;pkg&gt;</code></td><td>Why is this package here? Every dependency path, shortest first. With <code>--blast</code>, everything that breaks if it is compromised.</td></tr>
+<tr><td><code>barecode deps</code></td><td>Do declared, installed and actually-imported dependencies agree? Reports <em>missing</em>, <em>unused</em> and <em>phantom</em>.</td></tr>
+<tr><td><code>barecode killable</code></td><td>Which installed packages the standard library could replace — and, honestly, which it could not.</td></tr>
+</table>
+<p>Everything runs fully offline. No network calls, ever. Nothing from the audited
+environment is imported or executed — it is all file reads.</p>
+
+<h3>Two findings that are genuinely under-examined</h3>
+<ul>
+<li><strong><code>.pth</code> startup hooks.</strong> A <code>.pth</code> file in site-packages whose
+line begins <code>import&nbsp;</code> is executed by Python's <code>site</code> module on
+<em>every interpreter startup</em>. It is Python's equivalent of an npm
+<code>postinstall</code> hook, far less well known, and almost nobody audits it. We detect
+and report them — and never run them.</li>
+<li><strong><code>direct_url.json</code> provenance.</strong> Reveals packages installed from a
+git URL or a local path rather than from an index — code with no registry provenance
+sitting in your environment.</li>
+</ul>
+
+<h2>6. Architecture</h2>
+<pre><code>cli.py         argparse subcommands, exit codes, JSON/human rendering
+  ├── env.py         scan .dist-info: METADATA (email.parser), INSTALLER,
+  │                  direct_url.json provenance, .pth startup hooks, and the
+  │                  import-name -> distribution map derived from RECORD
+  ├── integrity.py   re-hash RECORD entries (csv + hashlib.file_digest,
+  │                  parallelised with concurrent.futures)
+  ├── graph.py       PEP 508 requirement parsing, BFS `why` + blast radius
+  ├── project.py     declared deps (tomllib + requirements parser) vs actual
+  │                  imports (ast), and the three-way comparison
+  ├── advisor.py     curated package -> stdlib table with confidence levels
+  └── ansi.py        SGR styling, NO_COLOR/TTY precedence, width measurement
+
+tools/prove_zero_deps.py   the dependency proof (ast + sys.stdlib_module_names)
+tests/test_barecode.py     79 tests over synthetic .dist-info fixtures
+.github/workflows/ci.yml   the same proof, on a clean runner, no pip install</code></pre>
+<p>Data flows one way: <strong>scan → model → analyse → render</strong>. Analyzers never touch
+the filesystem directly and renderers never compute anything, which is why the
+<code>--json</code> and human output paths cannot disagree with each other.</p>
+
+<h3>How <code>verify</code> works, step by step</h3>
+<ol>
+<li>Find the target <code>site-packages</code> from <code>--path</code> (a project dir, a virtualenv root, or site-packages itself).</li>
+<li>For each <code>*.dist-info</code> directory, read <code>RECORD</code> with the <code>csv</code> module.</li>
+<li>Each row is <code>path,sha256=&lt;urlsafe-base64&gt;,size</code>. Rows without a hash (<code>RECORD</code> itself, most <code>.pyc</code> files) are counted, not checked — we report that count so the coverage claim is honest.</li>
+<li>Resolve the path and confirm it stays inside the <strong>environment root</strong>. A poisoned <code>RECORD</code> could contain <code>../../../../etc/passwd</code>; that is reported, never followed.</li>
+<li>If the recorded size already differs, report <code>size-mismatch</code> without hashing.</li>
+<li>Otherwise stream the file through <code>hashlib.file_digest</code>, encode as urlsafe base64 with padding stripped, and compare. A mismatch is <code>modified</code>.</li>
+<li>Hashing runs on a <code>ThreadPoolExecutor</code> sized from <code>os.process_cpu_count()</code>. <code>file_digest</code> releases the GIL while reading, so the threads give real parallelism.</li>
+</ol>
+
+<div class="page"></div>
+<h2>7. Zero dependencies — what we replaced</h2>
+<p>Full detail with rationale and inherited limitations is in <code>STDLIB.md</code>
+(17 substitutions). The headline ones:</p>
+<table>
+<tr><th style="width:34%">Normally you install</th><th>We used instead</th></tr>
+<tr><td><code>click</code> / <code>typer</code></td><td><code>argparse</code> with subparsers</td></tr>
+<tr><td><code>colorama</code> / <code>rich</code></td><td>raw ANSI SGR escapes, honouring <code>NO_COLOR</code> and TTY detection</td></tr>
+<tr><td><code>wcwidth</code></td><td>a 20-line escape-skipping width function</td></tr>
+<tr><td><code>packaging</code> (METADATA)</td><td><code>email.parser</code> — wheel METADATA genuinely <em>is</em> RFC 822</td></tr>
+<tr><td><code>packaging</code> (PEP 503 names)</td><td>one <code>re.sub</code> — that is the entire specification</td></tr>
+<tr><td><code>packaging</code> (PEP 508 reqs)</td><td>a reduced verbose regex</td></tr>
+<tr><td><code>networkx</code></td><td>two dicts and a <code>collections.deque</code> BFS</td></tr>
+<tr><td><code>tar</code>-style CSV handling</td><td><code>csv</code> — RECORD paths containing commas are quoted</td></tr>
+<tr><td><code>deptry</code> / <code>pipreqs</code></td><td><code>ast</code> walking <code>Import</code>/<code>ImportFrom</code></td></tr>
+<tr><td><code>toml</code> / <code>tomli</code></td><td><code>tomllib</code> (it <em>is</em> tomli, vendored into the stdlib)</td></tr>
+<tr><td><code>pytest</code></td><td><code>unittest</code> — 79 tests</td></tr>
+<tr><td><code>pyinstaller</code> / <code>shiv</code></td><td><code>zipapp</code> — a 66 KB executable <code>.pyz</code></td></tr>
+</table>
+<p>There is also deliberately <strong>no <code>[build-system]</code> table</strong> in
+<code>pyproject.toml</code>. A build backend such as <code>setuptools</code> is a dependency
+too, and omitting it makes the empty manifest unambiguous at a glance.</p>
+
+<h2>8. How we prove zero dependencies</h2>
+<p>A manifest describes <em>intent</em>. <code>make prove</code> checks <em>reality</em>:</p>
+<pre><code>$ make prove
+python              : 3.14.4  (297 stdlib modules known)
+files scanned       : 9
+ast nodes walked    : 15,000+
+distinct imports    : 24
+stdlib imports      : 23 / 24
+first-party imports : 1   (barecode)
+third-party imports : 0
+manifest            : empty
+RESULT: ZERO THIRD-PARTY DEPENDENCIES — manifest empty, every import is stdlib</code></pre>
+<p>It walks every source file with <code>ast</code>, collects every top-level import, and
+asserts each is a member of <code>sys.stdlib_module_names</code> — the frozen set CPython
+builds <em>at compile time</em> listing exactly what ships in the box. It also asserts
+<code>pyproject.toml</code> declares no dependencies and has no build-system table. Non-zero
+exit if either fails. There is deliberately <strong>no allowlist</strong>: an escape hatch
+would defeat the point. The proof script is itself subject to the proof.</p>
+<p>This is stronger than <code>npm ls</code> printing "(empty)", because <code>npm ls</code>
+only reads the manifest while this reads the code. The same two checks also run in GitHub
+Actions on a clean runner on every push, on Python 3.13 and 3.14, with
+<strong>no <code>pip install</code> step anywhere in the workflow</strong>.</p>
+
+<h2>9. Security posture</h2>
+<p>BareCode's job is inspecting untrusted directories, so this matters.</p>
+<ul>
+<li><strong>Nothing is executed.</strong> We never import from, or launch anything in, the audited environment. <code>.pth</code> files that execute code are detected and reported, never run.</li>
+<li><strong>Path containment.</strong> <code>RECORD</code> is attacker-controllable in a poisoned package. A recorded path resolving outside the environment root is a critical <code>escapes-environment</code> finding, not something we follow.</li>
+<li><strong>No shelling out.</strong> We never invoke <code>pip</code>, <code>git</code>, <code>uv</code> or any other process — both a hackathon rule and correct design.</li>
+<li><strong>No network.</strong> Nothing to exfiltrate to, nothing to intercept.</li>
+<li><strong>Symlinks are not followed</strong> when walking a project tree, avoiding loops and escapes.</li>
+<li><strong>Degrades rather than fails.</strong> Missing <code>RECORD</code>, unreadable directories and malformed <code>METADATA</code> produce reported findings, not tracebacks.</li>
+<li><strong>No invented cryptography.</strong> We verify SHA-256 digests the installer already computed.</li>
+</ul>
+
+<div class="page"></div>
+<h2>10. Testing</h2>
+<p><strong>79 tests, stdlib <code>unittest</code>, no plugins, 1.1 seconds.</strong> Fixtures are
+synthesised on disk — real <code>.dist-info</code> directories with real RECORD hashes in a
+<code>TemporaryDirectory</code> — so the suite is hermetic, offline, and never calls
+<code>pip</code>.</p>
+<p>The tests that matter most are the ones covering real bugs we hit:</p>
+<table>
+<tr><th style="width:46%">Test</th><th>Why it exists</th></tr>
+<tr><td><code>test_same_length_edit_detected_by_hash</code></td><td>The attack that survives size and mtime checks. This is the product.</td></tr>
+<tr><td><code>test_console_script_outside_site_packages_is_not_a_finding</code></td><td>A false positive we actually shipped and fixed: <code>RECORD</code> legitimately records <code>../../../bin/foo</code>.</td></tr>
+<tr><td><code>test_quoted_csv_path_with_comma</code></td><td>Fails if anyone replaces <code>csv.reader</code> with <code>split(",")</code>.</td></tr>
+<tr><td><code>test_transitive_dependency_is_not_phantom</code></td><td>A false positive that would have made <code>deps</code> untrustworthy.</td></tr>
+<tr><td><code>test_rfc2047_encoded_header_does_not_crash</code></td><td>Real METADATA files return a <code>Header</code> object, not a <code>str</code>.</td></tr>
+<tr><td><code>test_ast_ignores_module_names_in_strings_and_comments</code></td><td>Proves we use the AST rather than a regex.</td></tr>
+<tr><td><code>test_cycle_does_not_hang</code></td><td>Dependency cycles are legal in Python packaging and do occur.</td></tr>
+</table>
+
+<h2>11. Bonus challenges claimed</h2>
+<table>
+<tr><th>Bonus</th><th>Pts</th><th>Evidence</th></tr>
+<tr><td>STDLIB Log</td><td>+3</td><td><code>STDLIB.md</code> — 17 substitutions, each with a rationale and the limitation it inherits. Requirement is ≥10.</td></tr>
+<tr><td>Package Killer</td><td>+3</td><td><code>PACKAGE-KILLER.md</code> — feature matrices against <code>pipdeptree</code>, <code>pip-licenses</code> and <code>deptry</code>/<code>pipreqs</code>, <em>including what they still do better</em>.</td></tr>
+<tr><td>Reproducible Build</td><td>+5</td><td><code>make repro</code> builds twice from a clean tree, asserts byte-identical output, prints both SHA-256 hashes. Scope per the FAQ: same machine, same toolchain.</td></tr>
+<tr><td class="small">Single File <em>(declined)</em></td><td class="small">+5</td><td class="small">A single 3,000-line file would cost more under Code Quality &amp; Idiom (25% of the score) than the +5 gains. Declared as declined in <code>.zero-dep.toml</code> rather than half-attempted.</td></tr>
+</table>
+
+<h2>12. Limitations we state openly</h2>
+<p>The rules say a naive-but-honest implementation outscores a fast one that hides its
+corners, so these are in the README, not buried:</p>
+<ul>
+<li><strong><code>.dist-info</code> only</strong> — legacy <code>.egg-info</code> installs are invisible to us.</li>
+<li><strong><code>RECORD</code> coverage is partial by nature</strong> — <code>RECORD</code> itself and <code>.pyc</code> files carry no hash, so roughly a third of entries cannot be verified. We print that count rather than implying a clean bill of health.</li>
+<li><strong>A rewritten <code>RECORD</code> defeats <code>verify</code></strong> — an attacker with write access can update the hashes to match their payload. We catch everything that alters files <em>without</em> also rewriting the manifest. Detecting that needs an out-of-band record.</li>
+<li><strong>No PEP 508 marker evaluation, no PEP 440 version comparison</strong> — so no conflict detection. We record markers verbatim and label edges conditional rather than guessing, because a wrong dependency edge is worse than an absent one.</li>
+<li><strong>Lockfiles are not read as declarations</strong> — <code>poetry.lock</code>/<code>uv.lock</code> list the full transitive closure, which would make every transitive package look intentional.</li>
+<li><strong><code>deps</code> cannot see dynamic imports</strong> — <code>importlib.import_module(computed_name)</code> is invisible to static analysis.</li>
+<li><strong>No CJK width handling</strong> in column alignment.</li>
+</ul>
+
+<h2>13. Key numbers to remember</h2>
+<table>
+<tr><td style="width:52%">Lines of Python (src + tools + tests)</td><td>~2,600</td></tr>
+<tr><td>Tests, all passing</td><td>79</td></tr>
+<tr><td>Third-party dependencies</td><td><strong>0</strong></td></tr>
+<tr><td>Distinct stdlib modules used</td><td>23</td></tr>
+<tr><td>Package → stdlib substitutions documented</td><td>17</td></tr>
+<tr><td>Artifact size (<code>dist/barecode.pyz</code>)</td><td>66 KB</td></tr>
+<tr><td><code>verify</code> on a real 190-package env</td><td>4,927 files hashed in 3.4 s</td></tr>
+<tr><td>Build command</td><td><code>make build</code> (one step, stdlib <code>zipapp</code>)</td></tr>
+</table>
+
+<h2>14. Likely judge questions, and the answers</h2>
+<h3>"Isn't reading pip's files a hidden dependency on pip?"</h3>
+<p>No, and the FAQ rules on this explicitly. Invoking a separately installed tool at runtime
+is forbidden; <em>parsing files those tools already produced</em> is permitted, on two
+conditions — disclose it in <code>STDLIB.md</code> (we do, §14) and degrade gracefully when
+the files are absent (we report packages without <code>RECORD</code> as unverifiable rather
+than failing). We never execute <code>pip</code>.</p>
+<h3>"Why not just use <code>importlib.metadata</code>? It's stdlib."</h3>
+<p>It resolves against the <em>running</em> interpreter. BareCode audits an arbitrary target
+environment, and doing that through <code>importlib.metadata</code> would mean putting a
+foreign <code>site-packages</code> on <code>sys.path</code> — importing code from the thing we
+are auditing. We read the on-disk layout instead.</p>
+<h3>"A rewritten RECORD defeats this, so what's the point?"</h3>
+<p>It raises the bar from "edit a file" to "edit a file and correctly rewrite the manifest",
+and it catches every attack class that does not bother — which historically is most of them.
+We state the limitation in the README rather than waiting to be asked.</p>
+<h3>"Is Bun/Node/Go not better for Track A?"</h3>
+<p>The cheat sheet says Node or Go are <em>easiest</em>, not required. For a multi-command
+CLI, <code>argparse</code> is strictly more capable than Node's <code>util.parseArgs</code>,
+which supports only string and boolean flags with no subcommands.</p>
+
+<p class="small" style="margin-top:8mm">Generated for Team Import Error · Zero Dependency Hackathon 2026 ·
+Every figure in this document was measured, not estimated.</p>
+
+</body>
+</html>

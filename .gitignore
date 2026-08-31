@@ -21,3 +21,6 @@ fixtures/generated/
 
 # Build output: produced by `make build`, not committed.
 dist/
+
+# Explainer source is tracked; regenerate the PDF with:
+#   chrome --headless --no-pdf-header-footer --print-to-pdf=docs/BareCode-Explainer.pdf docs/EXPLAINER.html
